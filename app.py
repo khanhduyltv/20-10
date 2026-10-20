@@ -1,4 +1,3 @@
-
 import os
 import json
 import urllib.request
@@ -97,12 +96,14 @@ def get_ngrok_url():
     return FALLBACK_NGROK_URL
 
 def get_base_url():
-    """Lấy URL gốc ưu tiên theo ngrok để tạo QR quét được từ mọi mạng (4G/Wi-Fi bên ngoài)"""
-    # 1. Nếu client truy cập qua header proxy của ngrok
+    """Lấy URL gốc ưu tiên theo domain deploy/ngrok để tạo QR quét được từ mọi mạng"""
     forwarded_host = request.headers.get("X-Forwarded-Host")
     forwarded_proto = request.headers.get("X-Forwarded-Proto", "https")
     if forwarded_host:
         return f"{forwarded_proto}://{forwarded_host}"
+
+    if "onrender.com" in request.host:
+        return f"https://{request.host}"
 
     if "ngrok" in request.host:
         proto = "https" if (request.is_secure or forwarded_proto == "https") else request.scheme
@@ -494,11 +495,9 @@ CREATE_HTML = r"""<!DOCTYPE html>
 
         // Tự động tạo sẵn 1 mã QR mẫu khi vừa vào trang
         window.addEventListener('DOMContentLoaded', () => {
-            if (window.location.hostname.includes('ngrok')) {
-                const baseInput = document.getElementById('baseUrlInput');
-                if (baseInput) {
-                    baseInput.value = window.location.origin;
-                }
+            const baseInput = document.getElementById('baseUrlInput');
+            if (baseInput && (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+                baseInput.value = window.location.origin;
             }
             createGiftLink();
         });
@@ -1073,9 +1072,11 @@ def api_stats(gift_id):
         return jsonify({"views": 0, "hearts": 0}), 404
     return jsonify({"views": row[0], "hearts": row[1]})
 
+# Đảm bảo database và templates luôn được tạo khi chạy trực tiếp hoặc qua Gunicorn trên Render
+init_db()
+ensure_templates()
+
 if __name__ == "__main__":
-    init_db()
-    ensure_templates()
     local_ip = get_local_ip()
     ngrok_url = get_ngrok_url()
     print("=" * 60)
